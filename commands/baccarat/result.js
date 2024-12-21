@@ -14,49 +14,85 @@ module.exports = {
         const { result, playerCards, bankerCards } =
             dealAndDetermineResult(deck);
 
+        // 초기 메시지
         let response = `결과는 **${result}**입니다!\n\n플레이어 카드: ${playerCards.join(
             ', '
         )}\n뱅커 카드: ${bankerCards.join(', ')}\n\n`;
 
-        const players = await User.find(); // 모든 유저 데이터 가져오기
+        // console.log('결과 계산 완료:', {
+        //     result,
+        //     playerCards,
+        //     bankerCards,
+        // });
 
-        for (const user of players) {
-            // 유저가 현재 채널에 베팅한 적이 있는지 확인
-            if (
-                !user.lastBet ||
-                user.lastBet.channelId !==
-                    interaction.channelId
-            ) {
-                continue;
+        try {
+            // 모든 유저 데이터 확인
+            const players = await User.find();
+            console.log(
+                '데이터베이스에서 가져온 플레이어 목록:',
+                players
+            );
+
+            for (const user of players) {
+                // console.log('현재 처리 중인 유저:', user);
+
+                // 유저가 해당 채널에 베팅한 기록이 있는지 확인
+                if (
+                    !user.lastBet ||
+                    user.lastBet.channelId !==
+                        interaction.channelId
+                ) {
+                    // console.log(
+                    //     `<@${user.userId}>는 이 채널에 베팅하지 않았습니다.`
+                    // );
+                    continue;
+                }
+
+                const { bet, amount } = user.lastBet;
+                // console.log(
+                //     `<@${user.userId}>의 베팅 정보:`,
+                //     { bet, amount }
+                // );
+
+                // 베팅 결과 처리
+                if (bet === result) {
+                    const winnings = calculateWinnings(
+                        result,
+                        amount
+                    );
+                    user.balance += winnings;
+                    response += `<@${user.userId}> **승리!** ${amount} 포인트를 베팅하고 ${winnings} 포인트를 획득했습니다.\n`;
+                    // console.log(
+                    //     `<@${user.userId}> 승리. 현재 잔액: ${user.balance}`
+                    // );
+                } else {
+                    response += `<@${user.userId}> **패배.** ${amount} 포인트를 잃었습니다.\n`;
+                    // console.log(
+                    //     `<@${user.userId}> 패배. 현재 잔액: ${user.balance}`
+                    // );
+                }
+
+                // 잔액 출력
+                response += `현재 잔액: ${user.balance} 포인트.\n\n`;
+
+                // 베팅 정보 초기화
+                user.lastBet = null;
+                await user.save();
             }
 
-            const { bet, amount } = user.lastBet;
-
-            if (bet === result) {
-                // 승리 시 배당금을 계산하고 추가
-                const winnings = calculateWinnings(
-                    result,
-                    amount
-                );
-                user.balance += winnings;
-                response += `<@${user.userId}> **승리!** ${amount} 포인트를 베팅하고 ${winnings} 포인트를 획득했습니다.\n`;
-            } else {
-                response += `<@${user.userId}> **패배.** ${amount} 포인트를 잃었습니다.\n`;
-            }
-
-            // 업데이트된 잔액 표시
-            response += `현재 잔액: ${user.balance} 포인트.\n\n`;
-
-            // 베팅 데이터 초기화
-            user.lastBet = null;
-            await user.save();
+            // 결과 응답
+            console.log('최종 응답 메시지:', response);
+            return interaction.reply(response);
+        } catch (error) {
+            console.error('결과 처리 중 오류:', error);
+            return interaction.reply(
+                '결과를 처리하는 중 오류가 발생했습니다. 관리자에게 문의하세요.'
+            );
         }
-
-        return interaction.reply(response);
     },
 };
 
-// 유틸리티 함수들
+// 유틸리티 함수
 function shuffleDeck() {
     const suits = ['hearts', 'diamonds', 'clubs', 'spades'];
     const ranks = [
@@ -97,6 +133,6 @@ function calculateScore(cards) {
 function calculateWinnings(result, amount) {
     if (result === 'player') return amount * 2;
     if (result === 'banker')
-        return Math.floor(amount * 1.95); // 5% 수수료
+        return Math.floor(amount * 1.95);
     if (result === 'tie') return amount * 8;
 }

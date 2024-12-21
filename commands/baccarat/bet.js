@@ -32,11 +32,19 @@ module.exports = {
             interaction.options.getInteger('금액');
         const userId = interaction.user.id;
 
-        // 유저 데이터 확인 또는 생성
         let user = await User.findOne({ userId });
         if (!user) {
             user = new User({ userId });
             await user.save();
+        }
+
+        if (
+            user.lastBet &&
+            user.lastBet.channelId === interaction.channelId
+        ) {
+            return interaction.reply(
+                '이미 이 게임에 베팅하셨습니다. 결과를 기다려주세요!'
+            );
         }
 
         if (amount <= 0) {
@@ -49,9 +57,19 @@ module.exports = {
             return interaction.reply('잔액이 부족합니다.');
         }
 
-        // 베팅 등록 (별도 데이터 없이도 가능)
+        // 베팅 정보 저장
+        user.lastBet = {
+            channelId: interaction.channelId, // 채널 ID 저장
+            bet, // 베팅 대상 저장
+            amount, // 베팅 금액 저장
+        };
         user.balance -= amount;
         await user.save();
+
+        console.log(
+            `유저 ${userId}의 베팅 정보:`,
+            user.lastBet
+        );
 
         return interaction.reply(
             `당신은 ${bet}에 ${amount} 포인트를 베팅했습니다. 현재 잔액: ${user.balance} 포인트.`
